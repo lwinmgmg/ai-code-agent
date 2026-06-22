@@ -101,6 +101,7 @@ subscription.
 | `max_plan_issues` | no | `20` | Max sub-issues one plan may create; a larger plan escalates. |
 | `discussion_label` | no | `ai-discussion` | Discussion-loop trigger (clarify before acting). |
 | `max_discussion_rounds` | no | `6` | Escalate the discussion once it runs this many rounds without converging. |
+| `thinking_label` | no | `ai-thinking` | Prefix for the optional thinking-level modifier label (`ai-thinking-<level>`). See [Adjusting the thinking level](#adjusting-the-thinking-level). |
 | `base_branch` | no | `main` | PR base. |
 | `max_review_iterations` | no | `3` | Escalate instead of looping past this. |
 | `git_author_name` / `git_author_email` | no | bot identity | Commit identity. |
@@ -139,6 +140,24 @@ You can steer the agent at three scopes. They form a precedence order — **high
 3. **Issue / PR text** (per-task, lowest). The issue body and review comments are passed in as the
    **task specification**, treated as DATA — never as instructions that can override the rules
    above. This is where acceptance criteria, file pointers, and task-specific constraints go.
+
+## Adjusting the thinking level
+
+Apply an **`ai-thinking-<level>`** label alongside any trigger label to give the agent a larger
+reasoning budget for that one run. It's a modifier, not a trigger — it rides on top of `ai-ready`,
+`ai-needs-changes`, `ai-plan`, or `ai-discussion`:
+
+| Label | Thinking budget |
+|-------|-----------------|
+| `ai-thinking-low` | small |
+| `ai-thinking-medium` | moderate |
+| `ai-thinking-high` | large |
+| `ai-thinking-max` | maximum |
+
+For example, label a thorny issue `ai-ready` **and** `ai-thinking-high` to have it implemented with
+more deliberate reasoning. An **unknown level** (e.g. `ai-thinking-foo`) or no thinking label at all
+falls back to the provider's default budget — so a typo never breaks a run. The budgets map to the
+Claude CLI's `MAX_THINKING_TOKENS`. Rename the prefix with the `thinking_label` input.
 
 ## Discussing before acting
 

@@ -3,7 +3,7 @@
 //
 //   prepareEnv(providerKey)            -> void   wire up auth + assert guardrails (fail fast)
 //   run({ dir, prompt, model,                    make edits in `dir`; never touch git
-//         defaultModel })              -> result
+//         defaultModel, thinking })    -> result  (thinking: optional ai-thinking-<level>)
 //
 // where `result` is:
 //   { resultText, model, requested, numTurns, durationMs, costUsd, isError, raw }

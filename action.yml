@@ -76,6 +76,14 @@ inputs:
     description: "Trigger label for the discussion loop (issues): clarify scope in comments before planning or implementing."
     required: false
     default: "ai-discussion"
+  thinking_label:
+    description: >-
+      Prefix for the optional thinking-level modifier label. Apply
+      `<thinking_label>-<level>` (e.g. ai-thinking-high) alongside a trigger label to
+      raise the agent's reasoning budget. Levels: low | medium | high | max; an unknown
+      level falls back to the provider default.
+    required: false
+    default: "ai-thinking"
   base_branch:
     description: "Base branch PRs target."
     required: false
@@ -175,6 +183,7 @@ runs:
         REVIEW_LABEL: ${{ inputs.review_label }}
         PLAN_LABEL: ${{ inputs.plan_label }}
         DISCUSSION_LABEL: ${{ inputs.discussion_label }}
+        THINKING_LABEL: ${{ inputs.thinking_label }}
         BASE_BRANCH: ${{ inputs.base_branch }}
         MAX_REVIEW_ITERATIONS: ${{ inputs.max_review_iterations }}
         MAX_PLAN_ISSUES: ${{ inputs.max_plan_issues }}

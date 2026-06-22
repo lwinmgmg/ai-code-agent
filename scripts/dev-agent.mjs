@@ -35,6 +35,7 @@ const cfg = {
   reviewLabel: process.env.REVIEW_LABEL || 'ai-needs-changes',
   planLabel: process.env.PLAN_LABEL || 'ai-plan',
   discussionLabel: process.env.DISCUSSION_LABEL || 'ai-discussion',
+  thinkingLabel: process.env.THINKING_LABEL || 'ai-thinking',
   models: (process.env.MODELS || 'opus,sonnet,haiku').split(',').map(s => s.trim()).filter(Boolean),
   inProgressLabel: process.env.INPROGRESS_LABEL || 'in-progress',
   noChangesLabel: process.env.NO_CHANGES_LABEL || 'needs-changes',
@@ -92,6 +93,19 @@ function matchTrigger(labels, base) {
   }
   if (names.includes(base)) return { label: base, model: '' };
   return null;
+}
+
+// A modifier label `ai-thinking-<level>` raises the agent's reasoning budget. Unlike the
+// trigger labels it does NOT start a flow — it rides alongside one (e.g. `ai-ready` +
+// `ai-thinking-high`). Returns the level suffix (e.g. 'high'); the provider maps a known
+// level to a budget and falls back to its default for an unknown/absent level.
+function matchThinking(labels) {
+  const prefix = cfg.thinkingLabel + '-';
+  for (const l of (labels || [])) {
+    const name = l.name || '';
+    if (name.startsWith(prefix)) return name.slice(prefix.length);
+  }
+  return '';
 }
 
 function relabelIssue(n, add, remove) {
@@ -169,7 +183,7 @@ const runSummary = (r) => `\n\n_provider: ${cfg.provider} · model: ${r.model} �
 // Provider engine: resolved + auth wired up at the start of main() (inside the
 // try/catch, so a stub/misconfigured provider fails cleanly with status=error).
 let provider;
-const runAgent = (dir, prompt, model) => provider.run({ dir, prompt, model, defaultModel: cfg.defaultModel });
+const runAgent = (dir, prompt, model, thinking) => provider.run({ dir, prompt, model, thinking, defaultModel: cfg.defaultModel });
 
 // Operator-supplied instructions: the `instructions_file` (a path in the cloned repo)
 // followed by inline `extra_instructions`. Trusted configuration from whoever runs the
@@ -213,18 +227,19 @@ function processIssue(number) {
   if (issue.labels.some(l => l.name === cfg.inProgressLabel)) { log(`#${number}: already ${cfg.inProgressLabel}; skipping`); setOutput('status', 'skipped'); return; }
 
   const { label: trigger, model } = trig;
+  const thinking = matchThinking(issue.labels);
   const branch = `dev/${slugify(issue.title)}-#${issue.number}`;
   const isBug = issue.labels.some(l => l.name === 'bug');
   const dir = mkdtempSync(join(cfg.workRoot, `issue-${issue.number}-`));
   try {
-    log(`#${issue.number}: claim (${trigger}, model=${model || 'default'}) + clone -> ${branch}`);
+    log(`#${issue.number}: claim (${trigger}, model=${model || 'default'}, thinking=${thinking || 'default'}) + clone -> ${branch}`);
     relabelIssue(issue.number, cfg.inProgressLabel, trigger);
     removeLabelsIfPresent(issue.number, new Set(issue.labels.map(l => l.name)), [cfg.discussionReadyLabel, cfg.needsUserLabel]);
     cloneRepo(dir, null);
     runOk('git', ['-C', dir, 'checkout', '-b', branch]);
 
     log(`#${issue.number}: running agent (${cfg.provider})`);
-    const r = runAgent(dir, issuePrompt(issue, dir), model);
+    const r = runAgent(dir, issuePrompt(issue, dir), model, thinking);
     logRun(`#${issue.number}`, r);
 
     if (existsSync(join(dir, 'ESCALATE.md'))) {
@@ -293,6 +308,7 @@ function processReviewPR(number) {
   if (!trig) { log(`PR#${number}: no ${cfg.reviewLabel} trigger; skipping`); setOutput('status', 'skipped'); return; }
 
   const { label: trigger, model } = trig;
+  const thinking = matchThinking(pr.labels);
   const dir = mkdtempSync(join(cfg.workRoot, `pr-${pr.number}-`));
   try {
     const { feedback, iterations } = gatherFeedback(pr.number);
@@ -307,9 +323,9 @@ function processReviewPR(number) {
       log(`PR#${pr.number}: no feedback`); setOutput('status', 'skipped'); return;
     }
 
-    log(`PR#${pr.number}: revise (${trigger}, model=${model || 'default'}) on ${pr.headRefName} (round ${iterations + 1})`);
+    log(`PR#${pr.number}: revise (${trigger}, model=${model || 'default'}, thinking=${thinking || 'default'}) on ${pr.headRefName} (round ${iterations + 1})`);
     cloneRepo(dir, pr.headRefName);
-    const r = runAgent(dir, reviewPrompt(pr, feedback, dir), model);
+    const r = runAgent(dir, reviewPrompt(pr, feedback, dir), model, thinking);
     logRun(`PR#${pr.number}`, r);
 
     if (existsSync(join(dir, 'ESCALATE.md'))) {
@@ -384,15 +400,16 @@ function processPlanIssue(number) {
   }
 
   const { label: trigger, model } = trig;
+  const thinking = matchThinking(issue.labels);
   const dir = mkdtempSync(join(cfg.workRoot, `plan-${issue.number}-`));
   try {
-    log(`#${issue.number}: claim plan (${trigger}, model=${model || 'default'}) + clone`);
+    log(`#${issue.number}: claim plan (${trigger}, model=${model || 'default'}, thinking=${thinking || 'default'}) + clone`);
     relabelIssue(issue.number, cfg.inProgressLabel, trigger);
     removeLabelsIfPresent(issue.number, new Set(issue.labels.map(l => l.name)), [cfg.discussionReadyLabel, cfg.needsUserLabel]);
     cloneRepo(dir, null); // read-only: agent reads the code; no branch, no commit, no push
 
     log(`#${issue.number}: running planning agent (${cfg.provider})`);
-    const r = runAgent(dir, planPrompt(issue, dir), model);
+    const r = runAgent(dir, planPrompt(issue, dir), model, thinking);
     logRun(`#${issue.number}`, r);
 
     if (existsSync(join(dir, 'ESCALATE.md'))) {
@@ -487,6 +504,7 @@ function processDiscussionIssue(number) {
   if (!trig) { log(`#${number}: no ${cfg.discussionLabel} trigger; skipping`); setOutput('status', 'skipped'); return; }
 
   const { label: trigger, model } = trig;
+  const thinking = matchThinking(issue.labels);
   const current = new Set(issue.labels.map(l => l.name));
   const { thread, rounds } = gatherThread(issue);
   const dir = mkdtempSync(join(cfg.workRoot, `disc-${issue.number}-`));
@@ -497,12 +515,12 @@ function processDiscussionIssue(number) {
       log(`#${issue.number}: discussion cap -> escalated`); setOutput('status', 'escalated'); return;
     }
 
-    log(`#${issue.number}: discuss (${trigger}, model=${model || 'default'}) round ${rounds + 1}`);
+    log(`#${issue.number}: discuss (${trigger}, model=${model || 'default'}, thinking=${thinking || 'default'}) round ${rounds + 1}`);
     // Take the turn: drop the trigger and any stale user-turn labels.
     removeLabelsIfPresent(issue.number, current, [trigger, cfg.needsUserLabel, cfg.discussionReadyLabel]);
     cloneRepo(dir, null); // read-only: agent reads the code; no branch, no commit
 
-    const r = runAgent(dir, discussionPrompt(issue, thread, dir), model);
+    const r = runAgent(dir, discussionPrompt(issue, thread, dir), model, thinking);
     logRun(`#${issue.number}`, r);
 
     if (existsSync(join(dir, 'ESCALATE.md'))) {

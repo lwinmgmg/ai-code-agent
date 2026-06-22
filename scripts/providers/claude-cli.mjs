@@ -6,13 +6,23 @@
 
 import { spawnSync } from 'node:child_process';
 
-export function runClaudeCli({ dir, prompt, model, defaultModel }) {
+// Named thinking levels -> a reasoning-token budget the Claude CLI honors via
+// MAX_THINKING_TOKENS. Driven by an `ai-thinking-<level>` label; an unknown or
+// absent level leaves the budget unset (the account default), per the issue.
+const THINKING_BUDGETS = { low: 4000, medium: 10000, high: 20000, max: 31999 };
+
+export function runClaudeCli({ dir, prompt, model, defaultModel, thinking }) {
   const chosen = model || defaultModel || ''; // '' => Claude account default
   const args = ['-p', prompt, '--permission-mode', 'acceptEdits',
     '--allowedTools', 'Read,Edit,Write,Glob,Grep,Bash', '--output-format', 'json'];
   if (chosen) args.push('--model', chosen); // alias (opus|sonnet|haiku) or full id
 
-  const res = spawnSync('claude', args, { cwd: dir, encoding: 'utf8', env: process.env, maxBuffer: 64 * 1024 * 1024 });
+  // Raise the thinking budget for a known level; unknown/absent => provider default.
+  const env = process.env;
+  const budget = THINKING_BUDGETS[(thinking || '').toLowerCase()];
+  if (budget) env.MAX_THINKING_TOKENS = String(budget);
+
+  const res = spawnSync('claude', args, { cwd: dir, encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 });
   if (res.error) throw res.error;
   if (res.status !== 0) throw new Error(`claude exited ${res.status}: ${(res.stderr || '').slice(0, 2000)}`);
 

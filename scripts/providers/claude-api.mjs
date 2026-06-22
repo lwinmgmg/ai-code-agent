@@ -20,6 +20,6 @@ export function prepareEnv(providerKey) {
   process.env.ANTHROPIC_API_KEY = providerKey; // read directly by `claude`
 }
 
-export function run({ dir, prompt, model, defaultModel }) {
-  return runClaudeCli({ dir, prompt, model, defaultModel });
+export function run({ dir, prompt, model, defaultModel, thinking }) {
+  return runClaudeCli({ dir, prompt, model, defaultModel, thinking });
 }
