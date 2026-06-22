@@ -142,13 +142,13 @@ runs:
       run: |
         set -euo pipefail
         case "$PROVIDER" in
-          claude-sub)
-            # Claude Code CLI — the claude-sub adapter shells out to `claude`.
+          claude-sub|claude-api)
+            # Claude Code CLI — the claude-sub and claude-api adapters shell out to `claude`.
             # TODO(prod): pin a version instead of installing latest.
             npm install -g @anthropic-ai/claude-code
             claude --version
             ;;
-          claude-api|gemini|openai|oss)
+          gemini|openai|oss)
             echo "::notice title=AI Code Agent::provider '$PROVIDER' is a stub — engine not installed yet."
             # TODO: install the multi-provider engine (e.g. aider): pipx install aider-chat
             ;;
