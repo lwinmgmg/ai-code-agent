@@ -21,6 +21,10 @@ always-on server, no polling:
 
 - An issue labeled **`ai-ready[-<model>]`** → implement on a `dev/*` branch → open a PR.
 - A PR labeled **`ai-needs-changes[-<model>]`** → revise the PR branch from review feedback.
+- An Epic issue labeled **`ai-plan[-<model>]`** → inspect the codebase and create ordered, serial
+  sub-issues (no code); the human gates each by labeling it `ai-ready` in turn.
+- An issue labeled **`ai-discussion[-<model>]`** → a clarify-before-acting comment loop; the agent
+  flips the label to `need-user-action` (has questions) or `user-action-ai-ready` (clear to start).
 
 If the **target** repo (the repo the Action runs against, not this one) has a `CLAUDE.md` /
 `AGENTS.md`, that governs the agent's behavior in the working tree.
@@ -38,7 +42,10 @@ Three layers, each with a single responsibility:
 3. **Orchestrator** ([scripts/dev-agent.mjs](./scripts/dev-agent.mjs)) — owns **everything
    provider-independent**: dispatch on the event, parse the trigger label + `-<model>` suffix,
    claim (relabel to `in-progress`), clone with the bot PAT, branch, call the provider, then handle
-   ESCALATE / no-changes / commit+push+PR / iteration cap.
+   ESCALATE / no-changes / commit+push+PR / iteration cap. Four flows: `processIssue` (implement),
+   `processReviewPR` (revise), `processPlanIssue` (Epic → sub-issues), and `processDiscussionIssue`
+   (clarify-before-acting comment loop). Issue events dispatch to discussion / plan / implement by
+   the triggering label.
 
 ### The provider contract (the key seam)
 
@@ -66,7 +73,10 @@ To add a provider: implement the two functions in `scripts/providers/<name>.mjs`
 ## Invariants — don't break these (they span multiple files)
 
 - **Edits-only separation.** Providers must not run git. If you add git/PR logic, it belongs in the
-  orchestrator, not an adapter.
+  orchestrator, not an adapter. The plan and discussion flows keep this shape too: the agent only
+  **writes a file** (`PLAN.json` / `DISCUSSION.json`) — it never creates issues, posts comments, or
+  relabels — and the orchestrator performs those GitHub mutations, mirroring how `ESCALATE.md` is
+  produced by the agent and acted on here.
 - **Prompt context precedence (highest wins).** The prompts layer three context sources, and the
   framing encodes their authority: target repo `CLAUDE.md`/`AGENTS.md` (operating manual) >
   operator `extra_instructions` / `instructions_file` (the `operatorInstructions()` block, trusted

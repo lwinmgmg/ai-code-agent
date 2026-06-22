@@ -18,7 +18,9 @@ jobs:
   dev-agent:
     if: >-
       startsWith(github.event.label.name, 'ai-ready') ||
-      startsWith(github.event.label.name, 'ai-needs-changes')
+      startsWith(github.event.label.name, 'ai-needs-changes') ||
+      startsWith(github.event.label.name, 'ai-plan') ||
+      startsWith(github.event.label.name, 'ai-discussion')
     runs-on: ubuntu-latest
     steps:
       - uses: lwinmgmg/ai-code-agent@v1

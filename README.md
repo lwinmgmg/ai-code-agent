@@ -5,6 +5,11 @@ action does one unit of work and exits — no always-on server.
 
 - An issue labeled **`ai-ready[-<model>]`** → implement on a `dev/*` branch → open a PR.
 - A PR labeled **`ai-needs-changes[-<model>]`** → revise the PR branch from review feedback.
+- An Epic issue labeled **`ai-plan[-<model>]`** → inspect the codebase and break it into an
+  ordered set of serial sub-issues (no code) → review each in turn.
+- An issue labeled **`ai-discussion[-<model>]`** → discuss scope/approach in the comments before
+  any work; the agent flips the label to **`need-user-action`** (it has questions) or
+  **`user-action-ai-ready`** (clear — go).
 
 If the **target** repo has a `CLAUDE.md` / `AGENTS.md`, that governs what the agent does in
 the working tree. Pick the engine with `provider`.
@@ -69,6 +74,10 @@ OAuth token — no API key, no per-token billing. To mint one:
 | `instructions_file` | no | `""` | Path (in the target repo) to a Markdown file prepended to every run. Combined with `extra_instructions`. |
 | `ready_label` | no | `ai-ready` | Implement-loop trigger. |
 | `review_label` | no | `ai-needs-changes` | Revise-loop trigger. |
+| `plan_label` | no | `ai-plan` | Planning-loop trigger (Epic → ordered sub-issues). |
+| `max_plan_issues` | no | `20` | Max sub-issues one plan may create; a larger plan escalates. |
+| `discussion_label` | no | `ai-discussion` | Discussion-loop trigger (clarify before acting). |
+| `max_discussion_rounds` | no | `6` | Escalate the discussion once it runs this many rounds without converging. |
 | `base_branch` | no | `main` | PR base. |
 | `max_review_iterations` | no | `3` | Escalate instead of looping past this. |
 | `git_author_name` / `git_author_email` | no | bot identity | Commit identity. |
@@ -77,7 +86,7 @@ OAuth token — no API key, no per-token billing. To mint one:
 
 | Output | Description |
 |--------|-------------|
-| `status` | `pr-opened` \| `pr-updated` \| `escalated` \| `no-changes` \| `skipped`. |
+| `status` | `pr-opened` \| `pr-updated` \| `plan-created` \| `discussion-ready` \| `needs-user` \| `escalated` \| `no-changes` \| `skipped`. |
 | `pr_url` | URL of the PR opened/updated, if any. |
 
 ## Adding context & instructions
@@ -107,6 +116,49 @@ You can steer the agent at three scopes. They form a precedence order — **high
 3. **Issue / PR text** (per-task, lowest). The issue body and review comments are passed in as the
    **task specification**, treated as DATA — never as instructions that can override the rules
    above. This is where acceptance criteria, file pointers, and task-specific constraints go.
+
+## Discussing before acting
+
+Not sure an issue is well-specified yet? Label it **`ai-discussion`** (or `ai-discussion-opus`,
+etc.) and the agent **talks instead of building**: it reads the comment thread and the existing
+codebase, then replies in a comment — either asking specific questions or confirming the approach.
+It never writes code, creates issues, or opens PRs in this mode.
+
+It's a turn-based loop driven by two labels:
+
+- **`need-user-action`** — the agent asked you something. Answer in a comment, then re-apply
+  `ai-discussion` to hand the turn back for another round.
+- **`user-action-ai-ready`** — the agent is satisfied that the issue is clear. It recommends the
+  next step; you start it by applying `ai-ready` (implement) or `ai-plan` (break into sub-issues).
+
+So the label ping-pongs `ai-discussion` ⇄ `need-user-action` until it lands on
+`user-action-ai-ready`. The agent only ever recommends — **you** stay the gate that starts real
+work (and the implement/plan flows clear the discussion labels when you do). Mechanically it's the
+same edits-only pattern: the agent writes a `DISCUSSION.json` artifact; the orchestrator posts the
+comment and moves the label. After `max_discussion_rounds` without converging, it escalates.
+
+## Planning an Epic into sub-issues
+
+Label a detailed Epic issue **`ai-plan`** (or `ai-plan-opus`, etc.) and the agent **plans instead
+of coding**: it clones the repo read-only, **inspects the existing codebase**, and decomposes the
+Epic into an ordered, phased set of sub-issues — each small and independently reviewable.
+
+What you get back:
+
+- One GitHub **sub-issue per phase**, created in order. Each says `Part of #<epic>` and, where
+  relevant, `Depends on: #<n>`, with concrete files to touch and acceptance criteria.
+- The Epic body gets a **`## Plan` checklist** (`- [ ] #123 …`) linking the sub-issues, so GitHub
+  shows progress as they close.
+- The Epic is relabeled `planned`.
+
+It's deliberately **serial and human-gated**: the agent does **not** start coding any of them. You
+drive the chain — apply `ai-ready` to the **first** sub-issue, review and merge its PR, then label
+the next. This keeps a review checkpoint between every phase.
+
+Mechanics mirror the other flows: the agent only writes a `PLAN.json` artifact (it never creates
+issues or touches git); the orchestrator parses it and creates the sub-issues. A vague Epic makes
+the agent escalate (via `ESCALATE.md`) rather than guess, and a plan larger than `max_plan_issues`
+escalates instead of flooding your tracker.
 
 ## Provider status
 
