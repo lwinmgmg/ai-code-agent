@@ -4,7 +4,7 @@
 // Runs the Claude Code CLI headless in "edits only" mode (the prompt forbids git)
 // and parses the JSON result.
 
-import { spawnSync } from 'node:child_process';
+import { runClaudeCli } from './claude-cli.mjs';
 
 export function prepareEnv(providerKey) {
   if (!providerKey) {
@@ -19,26 +19,5 @@ export function prepareEnv(providerKey) {
 }
 
 export function run({ dir, prompt, model, defaultModel }) {
-  const chosen = model || defaultModel || ''; // '' => Claude account default
-  const args = ['-p', prompt, '--permission-mode', 'acceptEdits',
-    '--allowedTools', 'Read,Edit,Write,Glob,Grep,Bash', '--output-format', 'json'];
-  if (chosen) args.push('--model', chosen); // alias (opus|sonnet|haiku) or full id
-
-  const res = spawnSync('claude', args, { cwd: dir, encoding: 'utf8', env: process.env, maxBuffer: 64 * 1024 * 1024 });
-  if (res.error) throw res.error;
-  if (res.status !== 0) throw new Error(`claude exited ${res.status}: ${(res.stderr || '').slice(0, 2000)}`);
-
-  let j = {};
-  try { j = JSON.parse(res.stdout); } catch { /* non-JSON output */ }
-  const used = j.modelUsage ? Object.keys(j.modelUsage) : [];
-  return {
-    raw: res.stdout,
-    resultText: j.result || '',
-    model: used.join(',') || chosen || '(account default)',
-    requested: chosen || '(account default)',
-    numTurns: j.num_turns,
-    durationMs: j.duration_ms,
-    costUsd: j.total_cost_usd,
-    isError: !!j.is_error,
-  };
+  return runClaudeCli({ dir, prompt, model, defaultModel });
 }
