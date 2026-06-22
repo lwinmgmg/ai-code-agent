@@ -1,0 +1,146 @@
+name: "AI Code Agent"
+description: >-
+  Provider-agnostic dev agent as a GitHub Action. An `ai-ready` issue becomes a
+  dev/* branch + PR; an `ai-needs-changes` PR gets revised from review feedback.
+  Pick the engine with `provider` (claude-sub today; gemini/openai/oss stubbed).
+author: "lwinmgmg"
+branding:
+  icon: "git-pull-request"
+  color: "purple"
+
+# ---------------------------------------------------------------------------
+# Pick the engine with `provider`. `claude-sub` uses a Claude Pro/Max
+# subscription (OAuth token, no API key); the other providers use an API key.
+# To stay subscription-only, pass only provider=claude-sub — that adapter
+# refuses to run if an API key is present, so the guarantee is enforced.
+# ---------------------------------------------------------------------------
+
+inputs:
+  provider:
+    description: "Engine/model backend (single). One of: claude-sub | claude-api | gemini | openai | oss."
+    required: true
+    default: "claude-sub"
+  provider_key:
+    description: >-
+      Auth for the provider. For claude-sub: the subscription OAuth token from
+      `claude setup-token`. For api-key providers: that provider's API key.
+    required: true
+  github_token:
+    description: >-
+      A repo-write PAT belonging to the dedicated bot account. Used to clone,
+      push dev/* branches, open PRs, and relabel. MUST NOT be the default
+      GITHUB_TOKEN — PRs opened by GITHUB_TOKEN do not trigger CI workflows.
+    required: true
+  language:
+    description: "Comma-separated target toolchains to pre-install on the runner, e.g. 'go,node,bun'. Supports multiple."
+    required: false
+    default: ""
+  model:
+    description: "Default model alias/id used when a trigger label has no -<model> suffix. Empty = the provider account default."
+    required: false
+    default: ""
+  models:
+    description: "Allowed -<model> label suffixes (comma-separated), e.g. 'opus,sonnet,haiku'."
+    required: false
+    default: "opus,sonnet,haiku"
+  ready_label:
+    description: "Trigger label for the implement loop (issues)."
+    required: false
+    default: "ai-ready"
+  review_label:
+    description: "Trigger label for the revise-PR loop (pull requests)."
+    required: false
+    default: "ai-needs-changes"
+  base_branch:
+    description: "Base branch PRs target."
+    required: false
+    default: "main"
+  max_review_iterations:
+    description: "Escalate instead of iterating once a PR has been revised this many times."
+    required: false
+    default: "3"
+  git_author_name:
+    description: "Commit author name (the bot identity, not a human reviewer)."
+    required: false
+    default: "ai-code-agent[bot]"
+  git_author_email:
+    description: "Commit author email."
+    required: false
+    default: "ai-code-agent@users.noreply.github.com"
+
+outputs:
+  status:
+    description: "Outcome: pr-opened | pr-updated | escalated | no-changes | skipped."
+    value: ${{ steps.agent.outputs.status }}
+  pr_url:
+    description: "URL of the PR opened or updated, if any."
+    value: ${{ steps.agent.outputs.pr_url }}
+
+runs:
+  using: "composite"
+  steps:
+    # --- language toolchains (driven by the `language` input) ----------------
+    # The ',{0},' wrapping makes the membership test exact ('node' won't match 'nodejs').
+    - name: Set up Go
+      if: ${{ contains(format(',{0},', inputs.language), ',go,') }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: "stable"
+
+    - name: Set up Node
+      if: ${{ contains(format(',{0},', inputs.language), ',node,') }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: "lts/*"
+
+    - name: Set up Bun
+      if: ${{ contains(format(',{0},', inputs.language), ',bun,') }}
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "latest"
+
+    # To add a language: copy a block above (e.g. python -> actions/setup-python).
+
+    # --- agent engine (driven by `provider`) --------------------------------
+    - name: Install agent engine
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+      run: |
+        set -euo pipefail
+        case "$PROVIDER" in
+          claude-sub)
+            # Claude Code CLI — the claude-sub adapter shells out to `claude`.
+            # TODO(prod): pin a version instead of installing latest.
+            npm install -g @anthropic-ai/claude-code
+            claude --version
+            ;;
+          claude-api|gemini|openai|oss)
+            echo "::notice title=AI Code Agent::provider '$PROVIDER' is a stub — engine not installed yet."
+            # TODO: install the multi-provider engine (e.g. aider): pipx install aider-chat
+            ;;
+          *)
+            echo "::error title=AI Code Agent::unknown provider '$PROVIDER'"; exit 1 ;;
+        esac
+
+    # --- run the provider-agnostic orchestrator -----------------------------
+    - name: Run agent
+      id: agent
+      shell: bash
+      env:
+        # provider / auth
+        PROVIDER: ${{ inputs.provider }}
+        PROVIDER_KEY: ${{ inputs.provider_key }}
+        GH_TOKEN: ${{ inputs.github_token }}     # gh CLI
+        GITHUB_TOKEN: ${{ inputs.github_token }} # git clone/push (bot PAT, NOT the default token)
+        # config
+        DEFAULT_MODEL: ${{ inputs.model }}
+        MODELS: ${{ inputs.models }}
+        READY_LABEL: ${{ inputs.ready_label }}
+        REVIEW_LABEL: ${{ inputs.review_label }}
+        BASE_BRANCH: ${{ inputs.base_branch }}
+        MAX_REVIEW_ITERATIONS: ${{ inputs.max_review_iterations }}
+        GIT_AUTHOR_NAME: ${{ inputs.git_author_name }}
+        GIT_AUTHOR_EMAIL: ${{ inputs.git_author_email }}
+        # GITHUB_REPOSITORY, GITHUB_EVENT_PATH, GITHUB_EVENT_NAME, RUNNER_TEMP come from the runner.
+      run: node "${{ github.action_path }}/scripts/dev-agent.mjs"

@@ -1,0 +1,30 @@
+# Example caller for a project that wants a key-based provider.
+# (These providers are STUBS today — see the repo README "Provider status".)
+#
+# Required secret: an API key for the chosen provider (here, Gemini).
+
+name: Dev agent (gemini)
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: ai-code-agent-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  dev-agent:
+    if: >-
+      startsWith(github.event.label.name, 'ai-ready') ||
+      startsWith(github.event.label.name, 'ai-needs-changes')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: lwinmgmg/ai-code-agent@v1
+        with:
+          provider: gemini
+          provider_key: ${{ secrets.GEMINI_API_KEY }}
+          github_token: ${{ secrets.DEV_BOT_PAT }}
+          language: "node"
+          model: "gemini-2.5-pro"
