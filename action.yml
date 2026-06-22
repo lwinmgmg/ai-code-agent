@@ -1,8 +1,7 @@
 name: "AI Code Agent"
 description: >-
-  Provider-agnostic dev agent as a GitHub Action. An `ai-ready` issue becomes a
-  dev/* branch + PR; an `ai-needs-changes` PR gets revised from review feedback.
-  Pick the engine with `provider` (claude-sub today; gemini/openai/oss stubbed).
+  Provider-agnostic dev agent GitHub Action: `ai-ready` issues become dev
+  branches + PRs; `ai-needs-changes` PRs get revised.
 author: "lwinmgmg"
 branding:
   icon: "git-pull-request"
