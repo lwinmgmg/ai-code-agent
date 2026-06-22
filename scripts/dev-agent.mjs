@@ -109,6 +109,35 @@ function relabelPR(n, add, remove) {
 const commentIssue = (n, body) => gh(['issue', 'comment', String(n), '--repo', cfg.repo, '--body', body]);
 const commentPR = (n, body) => gh(['pr', 'comment', String(n), '--repo', cfg.repo, '--body', body]);
 
+// Upsert the status labels the orchestrator itself applies, so a relabel never fails
+// on a missing label (e.g. `gh issue edit --add-label in-progress` -> "'in-progress' not
+// found"). The `ai-*` trigger labels are applied by humans and are intentionally excluded
+// — we don't create them. Best-effort: a labels API hiccup must not abort the run.
+function ensureManagedLabels() {
+  const managed = [...new Set([
+    cfg.inProgressLabel,
+    cfg.noChangesLabel,
+    cfg.escalatedLabel,
+    cfg.plannedLabel,
+    cfg.needsUserLabel,
+    cfg.discussionReadyLabel,
+  ])].filter(n => n && !n.startsWith('ai-'));
+
+  let existing = new Set();
+  try {
+    const list = JSON.parse(gh(['label', 'list', '--repo', cfg.repo, '--limit', '200', '--json', 'name']));
+    existing = new Set(list.map(l => l.name));
+  } catch (e) {
+    log(`warn: could not list labels (${e?.message || e}); will try to create managed labels anyway`);
+  }
+  for (const name of managed) {
+    if (existing.has(name)) continue;
+    const res = run('gh', ['label', 'create', name, '--repo', cfg.repo, '--force']);
+    if (res.status === 0) log(`ensured label '${name}'`);
+    else log(`warn: could not create label '${name}': ${(res.stderr || '').trim().slice(0, 300)}`);
+  }
+}
+
 // Remove any of `names` that are currently on the issue (one gh call; no error on absent).
 function removeLabelsIfPresent(number, currentNames, names) {
   const toRemove = names.filter(n => n && currentNames.has(n));
@@ -515,6 +544,8 @@ function main() {
   const eventPath = required('GITHUB_EVENT_PATH');
   const event = JSON.parse(readFileSync(eventPath, 'utf8'));
   const triggerLabel = event.label?.name || '(none)';
+
+  ensureManagedLabels();   // create the status labels we apply before any relabel call
 
   if (event.pull_request) {
     log(`event: pull_request labeled '${triggerLabel}' on PR #${event.pull_request.number}`);
