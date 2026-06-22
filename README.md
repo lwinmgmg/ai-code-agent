@@ -16,8 +16,9 @@ the working tree. Pick the engine with `provider`.
 
 > **Subscription or API key.** `provider: claude-sub` uses a Claude Pro/Max subscription
 > (OAuth token, no API key) and refuses to run if `ANTHROPIC_API_KEY` is set — so a project
-> that wants to stay subscription-only gets that guarantee enforced. The other providers use
-> an API key.
+> that wants to stay subscription-only gets that guarantee enforced. `provider: claude-api`
+> runs the same Claude Code engine but authenticates with an `ANTHROPIC_API_KEY` (metered
+> per-token billing). The remaining providers are still stubs.
 
 ## Quick start
 
@@ -59,6 +60,28 @@ OAuth token — no API key, no per-token billing. To mint one:
 > **Treat this token like a password** — it grants use of your subscription. Keep it in GitHub
 > Secrets, never in code. The `claude-sub` adapter refuses to run if `ANTHROPIC_API_KEY` is also
 > present, so a stray API key can't silently bypass subscription billing.
+
+## Using an Anthropic API key (`claude-api`)
+
+The `claude-api` provider runs the **same Claude Code engine** as `claude-sub` but authenticates
+with an **Anthropic API key** instead of a subscription OAuth token. Use it for projects that bill
+Claude usage through the Anthropic API (**metered — you pay per token**) rather than a Pro/Max
+subscription.
+
+1. **Get an API key** from the [Anthropic Console](https://console.anthropic.com/) and **store it
+   as a secret** named `ANTHROPIC_API_KEY` in each repo (or once at the org level).
+2. **Wire it into the caller** — set `provider: claude-api` and pass the key as `provider_key`. The
+   [caller example](./examples/caller-claude-api.yml) already does this:
+   ```yaml
+   with:
+     provider: claude-api
+     provider_key: ${{ secrets.ANTHROPIC_API_KEY }}
+   ```
+
+> **The inverse of the `claude-sub` guard.** `claude-api` refuses to run if a subscription OAuth
+> token (`CLAUDE_CODE_OAUTH_TOKEN`) is present, so the two auth modes can't silently mix — each
+> provider owns exactly one credential. Pick `claude-sub` for subscription billing, `claude-api`
+> for API-key billing.
 
 ## Inputs
 
@@ -165,7 +188,7 @@ escalates instead of flooding your tracker.
 | Provider | Auth | Status |
 |----------|------|--------|
 | `claude-sub` | Subscription OAuth (`claude setup-token`) | ✅ implemented (Claude Code CLI) |
-| `claude-api` | `ANTHROPIC_API_KEY` | 🚧 stub |
+| `claude-api` | `ANTHROPIC_API_KEY` | ✅ implemented (Claude Code CLI) |
 | `gemini` | `GEMINI_API_KEY` | 🚧 stub |
 | `openai` | `OPENAI_API_KEY` | 🚧 stub |
 | `oss` | OpenAI-compatible endpoint | 🚧 stub |
