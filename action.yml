@@ -43,6 +43,24 @@ inputs:
     description: "Allowed -<model> label suffixes (comma-separated), e.g. 'opus,sonnet,haiku'."
     required: false
     default: "opus,sonnet,haiku"
+  extra_instructions:
+    description: >-
+      Extra operating instructions prepended to every agent run (both the
+      implement and revise flows). Trusted operator config that applies across
+      all issues/PRs using this workflow — useful for org-wide conventions like
+      "always add a changelog entry". The target repo's CLAUDE.md/AGENTS.md stays
+      authoritative on any conflict. Multi-line is fine (YAML block scalar).
+    required: false
+    default: ""
+  instructions_file:
+    description: >-
+      Path (relative to the target repo root) of a Markdown file whose contents
+      are prepended to every run, same as extra_instructions. Read from the
+      cloned repo, so it is version-controlled alongside the code. If both are
+      set, the file is included first, then extra_instructions. Missing file =
+      ignored with a warning.
+    required: false
+    default: ""
   ready_label:
     description: "Trigger label for the implement loop (issues)."
     required: false
@@ -136,6 +154,8 @@ runs:
         # config
         DEFAULT_MODEL: ${{ inputs.model }}
         MODELS: ${{ inputs.models }}
+        EXTRA_INSTRUCTIONS: ${{ inputs.extra_instructions }}
+        INSTRUCTIONS_FILE: ${{ inputs.instructions_file }}
         READY_LABEL: ${{ inputs.ready_label }}
         REVIEW_LABEL: ${{ inputs.review_label }}
         BASE_BRANCH: ${{ inputs.base_branch }}
