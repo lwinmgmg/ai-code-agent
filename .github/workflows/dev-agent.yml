@@ -1,4 +1,4 @@
-# Self-hosted dev agent for this repo — dogfoods lwinmgmg/ai-code-agent@v2.
+# Self-hosted dev agent for this repo — dogfoods lwinmgmg/ai-code-agent@v2.2.
 #
 # Required repo (or org) secrets:
 #   CLAUDE_CODE_OAUTH_TOKEN  - from `claude setup-token` (the subscription token).
@@ -34,7 +34,7 @@ jobs:
       startsWith(github.event.label.name, 'ai-discussion')
     runs-on: ubuntu-latest
     steps:
-      - uses: lwinmgmg/ai-code-agent@v2
+      - uses: lwinmgmg/ai-code-agent@v2.2
         with:
           provider: claude-sub
           provider_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
