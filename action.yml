@@ -148,7 +148,13 @@ runs:
             npm install -g @anthropic-ai/claude-code
             claude --version
             ;;
-          gemini|openai|oss)
+          gemini)
+            # Gemini CLI — the gemini adapter shells out to `gemini`. Pinned per the
+            # convention that action.yml is pinned consumer-facing surface (no `latest`).
+            npm install -g @google/gemini-cli@0.47.0
+            gemini --version
+            ;;
+          openai|oss)
             echo "::notice title=AI Code Agent::provider '$PROVIDER' is a stub — engine not installed yet."
             # TODO: install the multi-provider engine (e.g. aider): pipx install aider-chat
             ;;
